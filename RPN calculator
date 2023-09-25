@@ -1,0 +1,86 @@
+def add_to_stack(x):
+    for i in range(0,len(x)):
+        if x[i] in "->":
+            continue
+        if x[i] in oplist:
+            continue
+        else:
+            N.append(convert_type(x[i]))
+            #print("added to stack", N)
+def isanum(x): # will run through each string in x character by character when passed w x[i]
+    for i in x:
+        if i == ".":
+            continue
+        elif i.isdigit() == True:
+            continue
+        else:
+            return False
+    return True
+    
+def read_nums(x):
+    N = []
+    for i in range(0,len(x)):
+        if x[i] == "->":
+            mykey = x[i+1]
+            i+=1 # so i do not see variable after -> again
+            if len(N) > 1 :
+                print("too many things on stack for variable assignment.")
+                return
+            else:
+                myval = N.pop()
+                varbls[mykey] = myval
+                N.append(myval)
+                print(mykey, " has been assigned the value : ", myval)
+        elif isanum(x[i])== True:
+            N.append(float(x[i]))
+        elif x[i].isalpha():
+            if x[i] not in varbls:
+                print( " variable has yet to be assigned a value. ")
+                return
+            else:
+                N.append(varbls[x[i]]) 
+        elif x[i] in oplist:
+            if len(N) < 2:
+                print(" Too few items on stack. ")
+                return
+            else:
+                temp1 = N.pop()
+                temp2 = N.pop()
+                temp3 = x[i]
+                N.append(do_math(temp1,temp2,temp3))  
+        else:
+            print("input error")
+            break
+    print("The result is: ", N[0])          
+def do_math(value1,value2,operand):
+    if operand == "+":
+        toreturn = value1 + value2
+        return(toreturn)
+    if operand == "/":
+        if value1 == 0:
+            print(" Cannot divide by zero." )
+            return
+        else:
+            toreturn = value2 / value1 # check if / by 0   
+            return(toreturn)
+    if operand == "*":
+        toreturn = value1 * value2
+        return(toreturn)
+    if operand == "-":
+        toreturn = value1 - value2
+        return(toreturn)
+               
+           
+
+
+oplist = ['+','/','*','-']        
+varbls = {}
+while True:
+
+    user_input = input("Please enter a formula. Type 'stop' to exit: ")
+    if user_input == "stop":
+        break
+    else:
+        x = user_input.split()
+        read_nums(x)
+        
