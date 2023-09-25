@@ -1,0 +1,280 @@
+grammar = {
+  "<S>": "<NP>",
+  "<NP>": ["seq", "<optArt>", "<optAdjs>", "<Noun>"],
+  "<optArt>": ["opt", "<Art>"],
+  "<Art>": ["or", "the", "a", "an"],
+  "<optAdjs>": ["opt", "<Adjs>"],
+  "<Adjs>": ["seq", "<Adj>", "<optAdjs>"],
+  "<Adj>": ["or", "big", "hairy", "blue", "fat", "orange"],
+  "<Noun>": ["or", "cat", "dog", "man", "woman"] }
+  
+def defined(symbol):
+  global grammar
+  if symbol[0] == '<':
+    return symbol in grammar
+  else:
+    return true
+
+def complete():
+  global grammar
+  for (nonterm, definition) in grammar.items():
+    if type(definition) == str:
+      return defined(definition)
+    elif type(definition) == list:
+      for symbol in definition[1:]:
+        if not defined(symbol):
+          return False
+      return True
+    else:
+      return False
+
+def calc_nullable(item, closedset):
+  global grammar
+  if type(item) == str:
+    if item[0] != '<':
+      return False
+    else:
+      if item in closedset:
+        return False
+      else:
+        closedset.add(item)
+        result = calc_nullable(grammar[item], closedset)
+        closedset.remove(item)
+        return result
+  elif item[0] == "or":
+    for choice in item[1:]:
+      if calc_nullable(choice, closedset):
+        return True
+    return False
+  elif item[0] == "seq":
+    for reqmnt in item[1:]:
+      if not calc_nullable(reqmnt, closedset):
+        return False
+    return True
+  elif item[0] == "opt":
+    return True
+  else:
+    print("error in grammar:", item[0])
+    return False
+
+def calc_first(item, closedset):
+  global grammar
+  if type(item) == str:
+    if item[0] != '<':
+      return { item }
+    else:
+      if item in closedset:
+        return set([])
+      else:
+        closedset.add(item)
+        result = calc_first(grammar[item], closedset)
+        closedset.remove(item)
+        return result
+  elif item[0] == "or":
+    result = set([])
+    for choice in item[1:]:
+      result.update(calc_first(choice, closedset))
+    return result
+  elif item[0] == "seq":
+    result = set([])
+    for reqmnt in item[1:]:
+      f = calc_first(reqmnt, closedset)
+      result.update(f - { "*null*" })
+      if not "*null*" in f:
+        return result
+    return result | { "*null*" }
+  elif item[0] == "opt":
+    return calc_first(item[1], closedset) | { "*null*" }
+  else:
+    print("error in grammar:", item[0])
+    return set([])
+
+def calc_follow_in_definition(wantedsymbol, currsymbol, closedset):
+  global grammar
+  definition = grammar[currsymbol]
+  if type(definition) == str:
+    if definition in closedset:
+      return set([])
+    elif definition == wantedsymbol:
+      return calc_follow(currsymbol, closedset | { wantedsymbol })
+    else:
+      return set([])
+  if definition[0] == "or":
+    if wantedsymbol in definition[1:]:
+      return calc_follow(currsymbol, closedset | { wantedsymbol }, depth + 1)
+    else:
+      return set([])
+  if definition[0] == "seq":
+    result = set([])
+    for pos in range(1, len(definition) - 1):
+      reqmnt = definition[pos]
+      if reqmnt == wantedsymbol:
+        firstofrest = calc_first(["seq"] + definition[pos+1:], set([]))
+        result.update(firstofrest)
+        if "*null*" in firstofrest:
+          result.update(calc_follow(currsymbol, closedset | { wantedsymbol }))
+    if definition[-1] == wantedsymbol:
+      result.update(calc_follow(currsymbol, closedset | { wantedsymbol }))
+    return result - { "*null*" }
+  if definition[0] == "opt":
+    if definition[1] == wantedsymbol:
+      return calc_follow(currsymbol, closedset | { wantedsymbol })
+    else:
+      return set([])
+  print("error in grammar:", definition[0])
+  return set([])
+
+def calc_follow(wanted, closedset):
+  global grammar
+  if wanted[0] != '<':
+    return set([])
+  if wanted in closedset:
+    return set([])
+  if wanted == "<S>":
+    result = { "*end*" }
+  else:
+    result = set([])
+  for (symbol, definition) in grammar.items():
+    result.update(calc_follow_in_definition(wanted, symbol, closedset))
+  return result
+  
+nullables = { }
+firsts = { }
+follows = { }
+
+def nullable(symbol):
+  if symbol[0] == '<':
+    return nullables[symbol]
+  return False
+
+def first(symbol):
+  if symbol[0] == '<':
+    return firsts[symbol]
+  return { symbol }
+
+def follow(symbol):
+  return follows[symbol]
+  return ()
+
+def validate():
+  global grammar
+  for (symbol, definition) in grammar.items():
+    if definition[0] == "opt":
+      fi = first(definition[1])
+      fo = follow(symbol)
+      if fi & fo:
+        print(symbol, "choice not distinct")
+        return False
+    elif definition[0] == "or":
+      indicator = []
+      for item in definition[1:]:
+        fi = first(item)
+        if nullable(item):
+          fi.update(follow(symbol))
+        indicator.append(fi)
+      for i in range(0, len(indicator)):
+        for j in range(i + 1, len(indicator)):
+          if indicator[i] & indicator[j]:
+            print(symbol, "choices not distinct")
+            return False
+  return True
+#must return ( tree, remaining words[])
+def parse(symbol, definition, words):
+  
+  if definition[0] == "seq":
+    listings = [symbol]
+    #looks at each <> in definition and gets the 3 things for each, then moves onto next.
+    for d in definition[1:]:
+      (t1,w1) = parse(d, grammar[d], words) 
+      if False in (t1,w1):
+        print("parse1 fail")
+        return (False,False)
+      listings.append(t1)
+      words = w1
+    listings=tuple(listings)
+    
+    return (listings,w1)
+  if definition[0] == "or":   
+    for d in definition[1:]: 
+      if nullable(d) == True:
+        if words[0] in first(d) | follow(d):
+          (t1,w1) = parse(d, d, words )
+          if False in (t1,w1):
+              print("error in or loop1")
+              return (False,False)
+          return((symbol,t1),w1)
+        else:
+          continue
+      if words[0] in first(d):
+        (t1,w1) = parse(d, d, words)
+        if False in (t1,w1):
+              print("error in or loop2")
+              return (False,False)
+        return ((symbol, t1), w1)
+    return (False,False) # not compatible 
+
+  if definition[0] == "opt":
+    if words[0] in first(definition[1]):
+      (t1,w1)= parse(definition[1],definition[1],words)
+      if False in (t1,w1):
+          print("error in or loop1")
+          return (False,False)
+      return ((symbol,t1),w1)
+    else:
+      return ( () , words )
+
+  if type(definition) == str: #nonterminal will start w a <, exact word wont.
+      if definition[0] == "<":
+        (t1,w1) = parse(definition, grammar[definition],words)
+        if False in (t1,w1):
+            print("error in or loop1")
+            return (False,False)
+        return (t1,w1)
+      elif definition == words[0]:
+        return ((definition,), words[1:])
+      else:
+        return (False,False)
+  
+"""
+    example call:  parse("<NP>", ["seq", "<optArt>", "<optAdjs>", "<Noun>"], ["the", "cat", "bit", "the", "big", "dog"])
+    returns (tree, remaining_words) or () for failure
+    the example call should return something like this:
+    (('<NP>', ('<NP>', ('<optArt>', ('<Art>', ('the',))),
+                       ('<optAdjs>', ()), 
+                       ('<Noun>', ('cat',)))), ['bit', 'the', 'big', 'dog', '*end*'])
+"""
+
+def display(tree, depth):
+  if type(tree) == str:
+    print("  " * depth, tree)
+  if tree == ():
+    print("  " * depth, "()")
+  else:
+    print("  " * depth, tree[0])
+    for t in tree[1:]:
+      display(t, depth + 1)
+
+def showdict(d):
+  for key, value in d.items():
+    print(key, value)
+
+def run():
+  for symbol in grammar:
+    nullables[symbol] = calc_nullable(symbol, set([]))
+  for symbol in grammar:
+    firsts[symbol] = calc_first(symbol, set([]))
+  for symbol in grammar:
+    follows[symbol] = calc_follow(symbol, set([]))
+  if not validate():
+    return
+  sentence = input("input: ")
+  words = sentence.split()
+  words.append("*end*")
+  p = parse("<S>", "<S>", words)
+  if p == ():
+    print("failed")
+  else:
+    display(p[0], 0)
+    if p[1] != ["*end*"]:
+      print("But there were words left over:", p[1])
+
